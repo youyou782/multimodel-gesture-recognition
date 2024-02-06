@@ -1,2 +1,0 @@
-1. phase has a length of 72000 for each sample
-2. RSS has a length of 15356 for each sample
