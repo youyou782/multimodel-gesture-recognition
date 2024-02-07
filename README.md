@@ -5,7 +5,7 @@
 git clone https://github.com/youyou782/multimodel-gesture-recognition.git
 ```
 123
-##### 2. Change branches
+##### 2. Change branche
 ```
 git checkout -b <your-name>
 ```
