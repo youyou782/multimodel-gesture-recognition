@@ -13,6 +13,9 @@ def load_images_from_folder(dataset_path):
                 img = Image.open(os.path.join(folderpath, filename)).convert('L')
                 images.append(np.array(img))
                 label.append(foldername)
+    print(images[0][0])
+    print(label[0])
+
     return images, label
 
 
@@ -24,10 +27,10 @@ if __name__ == "__main__" :
 
     print("Number of images:", len(image))
     if len(image) > 0:
-        # plt.imshow(image[0], cmap='gray')
-        # plt.colorbar()  
-        # plt.show()
+        plt.imshow(image[0], cmap='gray')
+        plt.colorbar()
+        plt.show()
         print("Size of image:", image[0].shape) 
-    #save images and labels    
-    np.save(os.path.join(os.path.dirname(script_path), 'image_data.npy'), image)
-    np.save(os.path.join(os.path.dirname(script_path), 'label_data.npy'), label)
+    # save images and labels
+    # np.save(os.path.join(os.path.dirname(script_path), 'image_data.npy'), image)
+    # np.save(os.path.join(os.path.dirname(script_path), 'label_data.npy'), label)
