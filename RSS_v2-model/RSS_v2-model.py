@@ -4,11 +4,11 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
 import numpy as np
-import logging
 from sklearn.preprocessing import LabelEncoder
+import logging
 
 # config log
-logging.basicConfig(filename='training_epoch1000.log', level=logging.INFO,
+logging.basicConfig(filename='training_bs32_epo100.log', level=logging.INFO,
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
 # put device on GPU
@@ -19,7 +19,7 @@ print(f"Training on {device}")
 # data_array = np.load('time_series_data.npy')
 # label_array = np.load('labels.npy')
 script_path = os.path.abspath(__file__)
-data_array = np.load(os.path.join(os.path.dirname(script_path), 'time_series_data.npy'))
+data_array = np.load(os.path.join(os.path.dirname(script_path), 'time_series.npy'))
 label_array = np.load(os.path.join(os.path.dirname(script_path), 'labels.npy'))
 
 # data normalization
@@ -64,7 +64,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adjust learning rate if necessary
 
 # Training loop
-num_epochs = 1000  # Adjust number of epochs if necessary
+num_epochs = 100  # Adjust number of epochs if necessary
 for epoch in range(num_epochs):
     for inputs, labels in train_loader:
         inputs = inputs.to(device)
@@ -76,7 +76,7 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
     print(f'Epoch {epoch+1}, Loss: {loss.item()}')
-    logging.info(f'Epoch {epoch+1}, Loss: {loss.item()}')
+    logging.info(f'Epoch {epoch + 1}, Loss: {loss.item()}')
 
 # Testing
 correct = 0

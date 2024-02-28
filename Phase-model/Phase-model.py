@@ -5,8 +5,14 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import logging
 from tqdm import tqdm
 
+# config log
+logging.basicConfig(filename='training_bs64_epo100.log', level=logging.INFO,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
 # put device on GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Training on {device}")
@@ -18,10 +24,23 @@ script_path = os.path.abspath(__file__)
 data_array = np.load(os.path.join(os.path.dirname(script_path), 'time_series_data.npy'))
 label_array = np.load(os.path.join(os.path.dirname(script_path), 'labels.npy'))
 
-# data normalization
-mean = data_array.mean()
-std = data_array.std()
-data_normalized = (data_array - mean) / std
+# 标准化数据
+scaler = StandardScaler()
+data_scaled = scaler.fit_transform(data_array)
+
+# 实例化PCA，选择主成分的数目
+pca = PCA(n_components=360)  # 例如，降到2维
+
+# 对标准化后的数据进行PCA变换
+data_pca = pca.fit_transform(data_scaled)
+
+print("原始数据的形状：", data_scaled.shape)
+print("降维后数据的形状：", data_pca.shape)
+# exit(0)
+# # data normalization
+# mean = data_array.mean()
+# std = data_array.std()
+# data_normalized = (data_array - mean) / std
 
 
 # Preprocess labels
@@ -30,7 +49,7 @@ label_array = label_encoder.fit_transform(label_array)
 
 
 # Convert to PyTorch tensors
-data_tensor = torch.tensor(data_normalized, dtype=torch.float32).unsqueeze(-1)  # Add feature dimension
+data_tensor = torch.tensor(data_pca, dtype=torch.float32).unsqueeze(-1)  # Add feature dimension
 label_tensor = torch.tensor(label_array, dtype=torch.long)
 
 # Create dataset and split
@@ -40,8 +59,8 @@ test_size = len(dataset) - train_size
 train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
 # DataLoader
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
+train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=64, shuffle=True)
 
 # LSTM Model
 class LSTMModel(nn.Module):
@@ -62,7 +81,7 @@ class LSTMModel(nn.Module):
 # Training setup
 model = LSTMModel().to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.005)  # Adjust learning rate if necessary
+optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adjust learning rate if necessary
 
 # Training loop
 num_epochs = 100  # Adjust number of epochs if necessary
@@ -78,6 +97,7 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
     print(f'Epoch {epoch+1}, Loss: {loss.item()}')
+    logging.info(f'Epoch {epoch+1}, Loss: {loss.item()}')
 
 # Testing
 correct = 0
@@ -93,3 +113,4 @@ with torch.no_grad():
         correct += (predicted == labels).sum().item()
 
 print(f'Accuracy: {100 * correct / total}%')
+logging.info(f'Accuracy: {100 * correct / total}%')

@@ -20,7 +20,7 @@ def load_time_series_from_folder(dataset_path):
 
 if __name__ == "__main__":
     script_path = os.path.abspath(__file__)
-    folder_path = os.path.join(os.path.dirname(script_path), "../DataSet/RSS")
+    folder_path = os.path.join(os.path.dirname(script_path), "../DataSet/RSS_v2")
     time_series, labels = load_time_series_from_folder(folder_path)
 
     print("Number of time series data:", len(time_series))
@@ -28,5 +28,5 @@ if __name__ == "__main__":
         print("Length of a single time series data:", time_series[0].shape)
 
     # Save time series data and labels
-    np.save(os.path.join(os.path.dirname(script_path), 'time_series_data.npy'), time_series)
+    np.save(os.path.join(os.path.dirname(script_path), 'time_series.npy'), time_series)
     np.save(os.path.join(os.path.dirname(script_path), 'labels.npy'), labels)
