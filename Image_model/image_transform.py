@@ -13,8 +13,8 @@ def load_images_from_folder(dataset_path):
                 img = Image.open(os.path.join(folderpath, filename)).convert('L')
                 images.append(np.array(img))
                 label.append(foldername)
-    print(images[0][0])
-    print(label[0])
+    print(len(images))
+    print(len(label))
 
     return images, label
 
