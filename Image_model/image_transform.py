@@ -11,7 +11,8 @@ def load_images_from_folder(dataset_path):
         for filename in os.listdir(folderpath):
             if filename.endswith(".jpg"):
                 img = Image.open(os.path.join(folderpath, filename)).convert('L')
-                images.append(np.array(img))
+                img_resized = img.resize((224, 224), resample=Image.BILINEAR)
+                images.append(np.array(img_resized))
                 label.append(foldername)
     return images, label
 
@@ -19,7 +20,7 @@ def load_images_from_folder(dataset_path):
 if __name__ == "__main__" :
     
     script_path = os.path.abspath(__file__)
-    folder_path = os.path.join(os.path.dirname(script_path), "../DataSet/Image")
+    folder_path = os.path.join(os.path.dirname(script_path), "../DataSet/Composed_Image")
     image, label = load_images_from_folder(folder_path)
 
     print("Number of images:", len(image))
@@ -30,4 +31,4 @@ if __name__ == "__main__" :
         print("Size of image:", image[0].shape) 
     #save images and labels    
     np.save(os.path.join(os.path.dirname(script_path), 'image_data.npy'), image)
-    np.save(os.path.join(os.path.dirname(script_path), 'label_data.npy'), label)
+    np.save(os.path.join(os.path.dirname(script_path), 'image_label.npy'), label)
