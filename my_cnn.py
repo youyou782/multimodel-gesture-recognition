@@ -16,7 +16,7 @@ print(f"Training on {device}")
 
 
 class MultiModalDataset(Dataset):
-    def __init__(self, image, phase, rss, label, augment=True):
+    def __init__(self, image, phase, rss, label, augment=False):
         self.image = image
         self.phase = phase
         self.rss = rss
@@ -28,10 +28,13 @@ class MultiModalDataset(Dataset):
             transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
             transforms.RandomResizedCrop(size=(image.shape[2], image.shape[3]), scale=(0.8, 1.0))
         ])
-        
+
     def __len__(self):
         # Expanded dataset size
-        return len(self.label) * 10
+        if self.augment:
+            return len(self.label) * 10
+        else:
+            return len(self.label)
 
     def __getitem__(self, idx):
         # Adjust idx for data expansion
@@ -46,7 +49,7 @@ class MultiModalDataset(Dataset):
         if self.augment:
             image = self.image_transforms(image)
 
-        # Apply jittering augmentation for RSS and phase
+            # Apply jittering augmentation for RSS and phase
             noise_level = 0.05
             phase += noise_level * torch.randn_like(phase)
             rss += noise_level * torch.randn_like(rss)
@@ -56,34 +59,56 @@ class MultiModalDataset(Dataset):
 
 def load_dataset():
     script_path = os.path.abspath(__file__)
-    image_path = os.path.join(os.path.dirname(script_path), "image_data.npy")
+    image_path = os.path.join(os.path.dirname(script_path), "image_data_normalized.npy")
     phase_path = os.path.join(os.path.dirname(script_path), "v4_Phase_data.npy")
     rss_path = os.path.join(os.path.dirname(script_path), "v4_RSS_data.npy")
     label_path = os.path.join(os.path.dirname(script_path), "image_label.npy")
-    image = np.load(image_path)
-    image = torch.tensor(image, dtype=torch.float32).unsqueeze(1)
-    print("image.size: ", image.size())
-
-    phase = np.load(phase_path)
-    phase = torch.tensor(phase, dtype=torch.float32).unsqueeze(-1)
-    phase = phase.permute(0,2,1)
-    print("phase.size: ", phase.size())
-
-    rss = np.load(rss_path)
-    rss = torch.tensor(rss, dtype=torch.float32).unsqueeze(-1)
-    rss = rss.permute(0,2,1)
-    print("rss.size: ", rss.size())
 
     label = np.load(label_path)
+    n_sample = label.shape[0]
+    indsh = (np.arange(n_sample))
+    np.random.shuffle(indsh)
+    labels = label.copy()[indsh]
     label_encoder = LabelEncoder()
-    label = label_encoder.fit_transform(label)
+    labels = label_encoder.fit_transform(labels)
+    labels = torch.tensor(labels, dtype=torch.long)
+    print("label.size: ", labels.size())
 
-    label = torch.tensor(label, dtype=torch.long)
-    print("label.size: ", label.size())
-    dataset = MultiModalDataset(image, phase, rss, label, augment=False)
-    train_size = int(0.8 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    labels_train = labels[:int(0.8 * n_sample)]
+    labels_test = labels[int(0.8 * n_sample):]
+
+
+    image = np.load(image_path)
+    images = image.copy()[indsh, :]
+    images = torch.tensor(images, dtype=torch.float32).unsqueeze(1)
+    print("image.size: ", images.size())
+
+    images_train = images[:int(0.8 * n_sample), :]
+    images_test = images[int(0.8 * n_sample):, :]
+
+    phase = np.load(phase_path)
+    phases = phase.copy()[indsh, :]
+    phases = torch.tensor(phases, dtype=torch.float32).unsqueeze(-1)
+    phases = phases.permute(0, 2, 1)
+    print("phase.size: ", phases.size())
+    phases_train = phases[:int(0.8 * n_sample), :]
+    phases_test = phases[int(0.8 * n_sample):, :]
+
+    rss = np.load(rss_path)
+    rsss = rss.copy()[indsh, :]
+    rsss = torch.tensor(rsss, dtype=torch.float32).unsqueeze(-1)
+    rsss = rsss.permute(0, 2, 1)
+    print("rss.size: ", rsss.size())
+
+    rsss_train = rsss[:int(0.8 * n_sample), :]
+    rsss_test = rsss[int(0.8 * n_sample):, :]
+
+    train_dataset = MultiModalDataset(images_train, phases_train, rsss_train, labels_train, augment=False)
+    test_dataset = MultiModalDataset(images_test, phases_test, rsss_test, labels_test, augment=False)
+
+    # train_size = int(0.8 * len(dataset))
+    # test_size = len(dataset) - train_size
+    # train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=True)
@@ -115,8 +140,9 @@ class ModifiedVGG16(nn.Module):
         x = torch.flatten(x, 1)
         features = self.intermediate_classifier(x)
         # features = self.bn(features)
-        # output = self.final_classifier(features)
+        features = self.final_classifier(features)
         return features, features
+
 
 ############################################################################################
 class CNN1DModel(nn.Module):
@@ -124,27 +150,30 @@ class CNN1DModel(nn.Module):
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.cnn1 = nn.Conv1d(in_channels=self.input_size, 
+        self.cnn1 = nn.Conv1d(in_channels=self.input_size,
                               out_channels=8, kernel_size=10, stride=3, padding=2)
         self.cnn2 = nn.Conv1d(in_channels=16, out_channels=1, kernel_size=17, stride=2, padding=0)
-        self.fc1 = nn.Linear(256, 16)
-        self.fc2 = nn.Linear(16, self.output_size)
-        
+        self.fc1 = nn.Linear(256, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, self.output_size)
+
     def forward(self, input_seq):
-        features = F.relu(self.cnn1(input_seq)) # torch.Size([64, 16, 32])
+        features = F.relu(self.cnn1(input_seq))  # torch.Size([64, 16, 32])
         features = features.reshape(features.shape[0], -1)
-        
+
         features = F.relu(self.fc1(features))
-        features = self.fc2(features)
+        features = F.relu(self.fc2(features))
+        features = self.fc3(features)
         return features, features
+
+
 ############################################################################################
 def pretrainer(model,
-               train_loader=train_loader, 
-               test_loader=test_loader, 
-               num_epoch_pretrain=100, 
+               train_loader=train_loader,
+               test_loader=test_loader,
+               num_epoch_pretrain=100,
                l_r=1e-4,
                input_index=1):
-    
     optimizer = optim.Adam(model.parameters(), lr=l_r)
     criterion = nn.CrossEntropyLoss()
     train_loss = []
@@ -198,23 +227,24 @@ def pretrainer(model,
     print('***********\n')
     return train_loss, test_loss
 
+
 #############################################################################################
 feature_size = 4
 #############################################################################################
 # train vgg16
-# print('################ image ##################\n')
-# model_image = ModifiedVGG16(feature_size=feature_size).to(device)
-# train_loss, test_loss = pretrainer(model=model_image, 
-#                                   num_epoch_pretrain=100, 
-#                                   input_index=1)
-#plt.figure()
-#plt.plot(train_loss, label='Training Loss')
-##plt.plot(test_loss, label='Test Loss')
-#plt.xlabel('Epoch')
-#plt.ylabel('Loss')
-#plt.legend()
-#plt.show()
-#plt.savefig(os.path.join(os.path.dirname(script_path), "train_image.png"))
+print('################ image ##################\n')
+model_image = ModifiedVGG16(feature_size=feature_size).to(device)
+train_loss, test_loss = pretrainer(model=model_image,
+                                   num_epoch_pretrain=100,
+                                   input_index=1)
+plt.figure()
+plt.plot(train_loss, label='Training Loss')
+plt.plot(test_loss, label='Test Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+plt.savefig(os.path.join(os.path.dirname(script_path), "train_image.png"))
 #############################################################################################
 # Train LSTM models
 print('################ phase ##################\n')
@@ -222,9 +252,9 @@ model_time_series1 = CNN1DModel(output_size=feature_size).to(device)
 
 model_time_series2 = CNN1DModel(output_size=feature_size).to(device)
 
-train_loss, test_loss = pretrainer(model=model_time_series1, 
-                                   num_epoch_pretrain=200, 
-                                   l_r=1e-4, 
+train_loss, test_loss = pretrainer(model=model_time_series1,
+                                   num_epoch_pretrain=200,
+                                   l_r=1e-4,
                                    input_index=2)
 
 plt.figure()
@@ -236,9 +266,9 @@ plt.legend()
 plt.show()
 plt.savefig(os.path.join(os.path.dirname(script_path), "train_phase.png"))
 print('################ rss ##################')
-train_loss, test_loss = pretrainer(model=model_time_series2, 
-                                   num_epoch_pretrain=200, 
-                                   l_r=1e-4, 
+train_loss, test_loss = pretrainer(model=model_time_series2,
+                                   num_epoch_pretrain=200,
+                                   l_r=1e-4,
                                    input_index=3)
 plt.figure()
 plt.plot(train_loss, label='Training Loss')
@@ -264,23 +294,29 @@ class MultiModelAttention(nn.Module):
 
         self.feature_size = features_size
         self.num_model = 3
-        self.bn = nn.BatchNorm1d(self.feature_size)
-        self.attention_weights = nn.Parameter(torch.cat((torch.ones(1, self.feature_size), torch.zeros(2, self.feature_size)), dim=0))  
+        self.bn1 = nn.BatchNorm1d(self.feature_size)
+        self.bn2 = nn.BatchNorm1d(self.feature_size)
+        self.bn3 = nn.BatchNorm1d(self.feature_size)
+        self.attention_weights = nn.Parameter(
+            torch.cat((torch.ones(1, self.feature_size), torch.zeros(2, self.feature_size)), dim=0))
         # ( num_features, feature_size), torch.randn(3, self.feature_size)
         self.fc1 = nn.Linear(self.feature_size, 16)
         self.fc2 = nn.Linear(16, 8)
         self.fc3 = nn.Linear(8, 4)
         self.dropout = nn.Dropout(0.2)
-        
 
     def forward(self, img_input, ts_input1, ts_input2):
         _, feature_img = self.model_image(img_input)
         _, feature_ts1 = self.model_time_series1(ts_input1)
         _, feature_ts2 = self.model_time_series2(ts_input2)
-        #print('image\n', feature_img[1,:])
-        #print('phase\n', feature_ts1[1,:])
-        #print('rss\n', feature_ts2[1,:])
-        
+        # print('image\n', feature_img[1,:])
+        # print('phase\n', feature_ts1[1,:])
+        # print('rss\n', feature_ts2[1,:])
+
+        feature_img = self.bn1(feature_img)
+        feature_ts1 = self.bn2(feature_ts1)
+        feature_ts2 = self.bn3(feature_ts2)
+
         features = torch.stack([feature_img, feature_ts1, feature_ts2],
                                dim=1)  # (batch_size, num_features, feature_size)
 
@@ -290,8 +326,8 @@ class MultiModelAttention(nn.Module):
 
         fused_features = torch.sum(weighted_features, dim=1)  # (batch_size, feature_size)
 
-        x = torch.relu(self.fc1(fused_features))  # fc layer with Tanh or relu ????
-        x = self.dropout(torch.relu(self.fc2(x)))
+        x = self.dropout(torch.relu(self.fc1(fused_features)))  # fc layer with Tanh or relu ????
+        x = torch.relu(self.fc2(x))
 
         return self.fc3(x)
 
@@ -306,11 +342,11 @@ multi_model = MultiModelAttention(features_size=feature_size,
 
 # Freeze the pretrained models
 for param in model_image.parameters():
-    param.requires_grad = False
+    param.requires_grad = True
 for param in model_time_series1.parameters():
-    param.requires_grad = False
+    param.requires_grad = True
 for param in model_time_series2.parameters():
-    param.requires_grad = False
+    param.requires_grad = True
 
 # Training loop for the multi-modal model (similar structure to previous training loops)
 optimizer_multi = optim.Adam(filter(lambda p: p.requires_grad, multi_model.parameters()),
@@ -319,7 +355,7 @@ optimizer_multi = optim.Adam(filter(lambda p: p.requires_grad, multi_model.param
 criterion_multi = nn.CrossEntropyLoss()
 train_multi_loss = []
 test_multi_loss = []
-for epoch in range(50):
+for epoch in range(150):
     multi_model.train()
     for images, phase, rss, labels in train_loader:
         images, phase, rss, labels = images.to(device), phase.to(device), rss.to(device), labels.to(device)
